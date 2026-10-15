@@ -86,11 +86,14 @@ public :
     bool viable_gradient(const unsigned int &, const unsigned int &) const;
 
     /**
-     * @brief Finds the strongest Sobel gradient vector in the neighborhood
-     * around the given coordinates.
+     * @brief Sobel gradient at the given front pixel, used by the data term.
+     *
+     * Computed as soon as one pixel of the patch has a fully known 3x3
+     * neighbourhood (see viable_gradient); unknown pixels enter the stencil
+     * with their placeholder value 255.
      * @param r Row coordinate.
      * @param c Column coordinate.
-     * @return Tuple (g_x, g_y) representing the strongest gradient found.
+     * @return Tuple (g_x, g_y), or (0, 0) if no pixel of the patch is viable.
      */
     std::tuple<int, int> gradient(const unsigned int &, const unsigned int &) const;
 

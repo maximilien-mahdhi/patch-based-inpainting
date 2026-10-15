@@ -1,6 +1,8 @@
 #include <iostream>
 #include <algorithm>
 #include <omp.h>
+#include <limits>
+#include <utility>
 
 #include "pixel.hpp"
 #include "map.hpp"
@@ -309,30 +311,26 @@ std::tuple<double,double> map::compute_normal(const unsigned int &r, const unsig
     return normalize(normal_i,normal_j);
 }
 
-// FIX: the original loop always read P[r-1][c+1], P[r][c+1], etc. (fixed r, c),
-// never using the loop variables i, j — so every iteration recomputed the exact
-// same Sobel gradient at the center point, and the "search for the max gradient
-// in the neighborhood" never actually happened. Changed to use i, j so the
-// search is real. Confirm this matches the intended behavior.
+// Data-term gradient: Sobel gradient at the front pixel (r, c) itself, computed as
+// soon as one pixel of the patch has a fully known 3x3 neighbourhood (otherwise
+// (0, 0)). Unknown pixels enter the stencil with their placeholder value 255.
+//
+// Note: taking instead the strongest gradient over the whole patch (as in the
+// Criminisi paper) was tried during the refactoring and gave visibly worse
+// results (e.g. structures duplicated from far edges on test_images/beach.png),
+// so the original behaviour is kept.
 std::tuple<int, int> map::gradient(const unsigned int &r, const unsigned int &c) const {
     int gap = (DEF_HEIGHT - 1) / 2;
-    std::tuple<int, int> grad = std::make_tuple(0, 0); // lowest amplitude vector possible so it will be beaten
     for (int i = r - gap; i < r + gap + 1; i++) {
         for (int j = c - gap; j < c + gap + 1; j++) {
-            if ((viable_gradient(i, j))) {
-                // sobel computation, centered on (i, j) instead of the fixed (r, c)
-                int g_x = P[i-1][j+1].color_value - P[i-1][j-1].color_value + 2 * (P[i][j+1].color_value - P[i][j-1].color_value) + P[i+1][j+1].color_value - P[i+1][j-1].color_value;
-                int g_y = P[i+1][j-1].color_value - P[i-1][j-1].color_value + 2 * (P[i+1][j].color_value - P[i-1][j].color_value) + P[i+1][j+1].color_value - P[i-1][j+1].color_value;
-
-                double buffer_squared_norm = pow(g_x, 2) + pow(g_y, 2); // storing squared norm of the computed gradient vector
-                if (buffer_squared_norm > pow(std::get<0> (grad), 2) + pow(std::get<1> (grad), 2)) {
-                    std::get<0> (grad) = g_x;
-                    std::get<1> (grad) = g_y;
-                }
+            if (viable_gradient(i, j)) {
+                int g_x = P[r-1][c+1].color_value - P[r-1][c-1].color_value + 2 * (P[r][c+1].color_value - P[r][c-1].color_value) + P[r+1][c+1].color_value - P[r+1][c-1].color_value;
+                int g_y = P[r+1][c-1].color_value - P[r-1][c-1].color_value + 2 * (P[r+1][c].color_value - P[r-1][c].color_value) + P[r+1][c+1].color_value - P[r-1][c+1].color_value;
+                return std::make_tuple(g_x, g_y);
             }
         }
     }
-    return grad;
+    return std::make_tuple(0, 0);
 }
 
 double map::compute_confidence(const unsigned int &r, const unsigned int &c) const {
@@ -422,7 +420,7 @@ void map::fill_from_patch(const unsigned int &r1, const unsigned int &c1, const 
 // not once per pixel).
 std::tuple<unsigned int, unsigned int> map::nearest_patch(const unsigned int &r, const unsigned int &c) const {
     unsigned int best_i = 0, best_j = 0;
-    double best_distance = 10e6; // insanely high initial value, guaranteed to be beaten by any real first candidate
+    double best_distance = std::numeric_limits<double>::infinity(); // beaten by any real candidate (an SSD can reach 225 * 255^2 > 10e6)
 
     int i_start = (DEF_HEIGHT + 1) / 2;
     int i_end = rows - DEF_HEIGHT + 2;
@@ -432,14 +430,16 @@ std::tuple<unsigned int, unsigned int> map::nearest_patch(const unsigned int &r,
     #pragma omp parallel
     {
         unsigned int local_best_i = 0, local_best_j = 0;
-        double local_best_distance = 10e6;
+        double local_best_distance = std::numeric_limits<double>::infinity();
 
         #pragma omp for collapse(2) schedule(dynamic)
         for (int i = i_start; i < i_end; i++) {
             for (int j = j_start; j < j_end; j++) {
                 if (patch_inside(i, j)) {
                     double buffer = distance_from_patches(r, c, i, j);
-                    if (buffer < local_best_distance) {
+                    // ties broken by position so that the result does not depend on thread scheduling
+                    if (buffer < local_best_distance ||
+                        (buffer == local_best_distance && std::make_pair((unsigned) i, (unsigned) j) < std::make_pair(local_best_i, local_best_j))) {
                         local_best_i = i;
                         local_best_j = j;
                         local_best_distance = buffer;
@@ -450,7 +450,8 @@ std::tuple<unsigned int, unsigned int> map::nearest_patch(const unsigned int &r,
 
         #pragma omp critical
         {
-            if (local_best_distance < best_distance) {
+            if (local_best_distance < best_distance ||
+                (local_best_distance == best_distance && std::make_pair(local_best_i, local_best_j) < std::make_pair(best_i, best_j))) {
                 best_distance = local_best_distance;
                 best_i = local_best_i;
                 best_j = local_best_j;

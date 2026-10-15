@@ -1,218 +1,391 @@
-# Patch-Based Inpainting
+<div align="center">
 
-![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white)
-![OpenMP](https://img.shields.io/badge/OpenMP-parallelized-informational)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+# 🧩 patch-based-inpainting 🧩
 
-*Last update : 27/09/2026*
+**Exemplar-based image inpainting in C++/OpenCV, following the patch-priority algorithm of Criminisi, Pérez and Toyama (2004), with interactive region selection, rotations and convolutions.**
 
-## Author
+C++17 · OpenCV · OpenMP-parallel patch search · interactive polygon selection
 
-*Maximilien MAHDHI — 31/01/2025*
+<br>
 
-## Overview
+<table>
+  <tr>
+    <td align="center" valign="top" width="260">
+      <a href="https://github.com/maximilien-mahdhi"><img src="https://github.com/maximilien-mahdhi.png" width="72" alt="Maximilien MAHDHI"></a><br>
+      <b>Maximilien MAHDHI</b><br>
+      <sub>Design and implementation</sub><br>
+      <sub><a href="https://github.com/maximilien-mahdhi">GitHub</a> · <a href="https://www.linkedin.com/in/maximilien-mahdhi">LinkedIn</a></sub>
+    </td>
+  </tr>
+</table>
 
-A C++/OpenCV implementation of exemplar-based image inpainting, following the
-patch-priority algorithm of Criminisi, Pérez and Toyama (2004), along with
-a small set of complementary image-processing tools (rotation, convolution).
+<br>
 
-This work stems from a 2-month project in image processing done in December 2024
-during my M1 MSIAM at UGA/Ensimag. The code is not perfect.
+![C++17](https://img.shields.io/badge/C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+![OpenMP](https://img.shields.io/badge/OpenMP-5C6BC0?style=for-the-badge)
+![Make](https://img.shields.io/badge/Make-427819?style=for-the-badge&logo=gnu&logoColor=white)
+![Platform](https://img.shields.io/badge/macOS%20%7C%20Linux-555555?style=for-the-badge&logo=apple&logoColor=white)
 
-## Features
+<br>
 
-- **Region-filling inpainting** — removes a user-defined region from an image
-  and reconstructs it by propagating texture and structure from the rest of
-  the image, patch by patch, prioritizing patches along strong edges first.
-- **Interactive region selection** — select the region to inpaint directly
-  with the mouse instead of typing pixel coordinates.
-- **Image rotation** — rigid rotation, and an experimental elastic
-  (distance-weighted) rotation.
-- **Convolution** — apply named kernels (Sobel, Prewitt, Laplacian, box blur,
-  Gaussian) to an image.
-- **Parallelized with OpenMP** — the core patch-search routine, the main
-  computational bottleneck, is parallelized for multi-core CPUs.
+<img src="figures/fingerprint.png" width="90%" alt="Inpainting of a fingerprint"/>
 
-## Example
+<sub><code>./build/main -i test_images/fingerprint_hole.png 73 49 72 143 49</code> — input, confidence map after filling, output and ground truth</sub>
 
-| Original : `fingerprint_hole.png` | Region to remove | Result : `region_filling_output.png` |
-|---|---|---|
-| ![original](test_images/fingerprint_hole.png) | *(selected interactively or via coordinates)* | ![result](output_images/region_filling_output.png) |
+</div>
 
-*This example can be reproduced by running :*
-```
-./build/main -i test_images/fingerprint_hole.png 73 49 72 143 49
-```
+<br>
 
-## Requirements
+> [!NOTE]
+> This repository comes from a 2-month image-processing project carried out in December 2024 during my M1 MSIAM at Université Grenoble Alpes (Ensimag).
 
-- A C++17-compatible compiler (for `<filesystem>`)
-- [OpenCV](https://opencv.org/) (core, imgproc, highgui modules)
-- OpenMP (bundled with GCC; on macOS, install via `brew install libomp`)
-- `make`
-
-## Build
-
-```bash
-make
-```
-
-This produces the executable at `build/main`.
-
-## Usage
-
-### General syntax
-
-```
-./build/main <flag> <image_path> [flag-specific parameters]
-```
-
-```
-./build/main -help
-```
-
-```
-Usage: ./build/main <flag> <image_path> [parameters]
-Available flags:
-  -help  : prints this command flag list
-  -i     : region-filling inpainting (polygon domain). No coords -> interactive mouse selection
-  -conv  : convolve with a named kernel
-  -r     : rigid rotation
-  -er    : elasticity (distance-weighted) rotation
-```
-
-### Flags at a glance
-
-| Flag | Purpose | Parameters | Example |
-|---|---|---|---|
-| `-help` | Show the flag list | *(none)* | `./build/main -help` |
-| `-i` | Region-filling inpainting | `[r1 c1 r2 c2 ...]` (optional — omit for interactive mouse selection) | `./build/main -i beach.png` |
-| `-r` | Rigid rotation | `<angle>` (degrees) | `./build/main -r beach.png 60` |
-| `-er` | Elastic (distance-weighted) rotation | `<angle>` (degrees) | `./build/main -er beach.png 60` |
-| `-conv` | Convolve with a named kernel | `<kernel_name>` | `./build/main -conv beach.png sobelX` |
+<br>
 
 ---
 
+## Table of contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Results](#results)
+- [Algorithm](#algorithm)
+- [Project structure](#project-structure)
+- [Design notes and limitations](#design-notes-and-limitations)
+- [References](#references)
+
+---
+
+## Overview
+
+*Inpainting* reconstructs a missing or unwanted region $`\Omega`$ of an image from the rest of the image. Exemplar-based methods fill $`\Omega`$ patch by patch, by copying the most similar patches found in the known region. The order in which the patches are filled is what preserves the structures : the algorithm of Criminisi et al. gives priority to patches that are well known and crossed by strong edges, so that lines are propagated before flat textures.
+
+<br>
+
+| Feature | Description |
+| --- | --- |
+| **Region-filling inpainting** | removes a polygonal region and rebuilds it patch by patch, strong edges first |
+| **Interactive selection** | the polygon is drawn with the mouse, with live feedback ; coordinates can also be passed on the command line |
+| **Rotations** | rigid rotation, and an experimental elastic rotation whose strength decreases with the distance to a centre |
+| **Convolutions** | named kernels : Sobel, Prewitt, Laplacian, box blur, Gaussian |
+| **OpenMP** | the exhaustive patch search, the bottleneck of the method, runs on all cores |
+
+<br>
+
+**Main results**
+
+- **Structures are propagated across the hole.** On the fingerprint, the ridges entering $`\Omega`$ from both sides are continued through it, and the result is visually close to the ground truth.
+- **Objects are removed cleanly from natural scenes.** On the beach scene, the gymnast disappears and the horizon, the waves and the sand are continued through the hole.
+- **The run time is dominated by the patch search.** About $`0.25`$ s for the $`187 \times 166`$ fingerprint and $`28`$ s for the $`408 \times 612`$ beach scene on 2 cores, where OpenMP gives a $`1.7\times`$ speed-up.
+
+<br>
+
+---
+
+## Installation
+
+You need a C++17 compiler, OpenCV 4 (core, imgproc, highgui, found through `pkg-config`), OpenMP and `make`.
+
+```bash
+git clone https://github.com/maximilien-mahdhi/patch-based-inpainting.git
+cd patch-based-inpainting
+make                                                 # builds build/main
+```
+
+The `Makefile` targets macOS (Apple clang with Homebrew's `libomp`). On Linux, override the compiler and the OpenMP flags :
+
+```bash
+make CXX=g++ OMP_CFLAGS=-fopenmp OMP_LIBS=-fopenmp
+```
+
+<details>
+<summary><b>Platform-specific setup</b></summary>
+
+<br>
+
+**macOS**
+
+```bash
+brew install opencv libomp pkg-config
+```
+
+**Debian / Ubuntu**
+
+```bash
+sudo apt install build-essential libopencv-dev pkg-config     # GCC ships with OpenMP (libgomp)
+```
+
+</details>
+
+<br>
+
+---
+
+## Usage
+
+```
+./build/main <flag> <image_path> [parameters]
+```
+
+| Flag | Purpose | Parameters | Example |
+| --- | --- | --- | --- |
+| `-help` | list the flags | — | `./build/main -help` |
+| `-i` | region-filling inpainting | polygon coordinates (optional : interactive selection otherwise) | `./build/main -i test_images/beach.png` |
+| `-r` | rigid rotation | angle in degrees | `./build/main -r test_images/Bird.png 60` |
+| `-er` | elastic rotation | angle in degrees | `./build/main -er test_images/Bird.png 60` |
+| `-conv` | convolution | kernel name | `./build/main -conv test_images/beach.png sobelX` |
+
+All outputs are written to `output_images/`, created on first run.
+
+<br>
+
 ### Inpainting (`-i`)
 
-**Interactive selection (recommended):**
+**Interactive selection** — run `-i` without coordinates and click the vertices of the polygon on the image :
 
 ```bash
 ./build/main -i test_images/fingerprint_hole.png
 ```
 
-Click the polygon vertices directly on the image. Segments alternate between
-horizontal and vertical edges, and the last point must line up with the first
-one's column to close the polygon. Live visual feedback shows the guide line
-and the closing edge (green when valid, orange otherwise).
-
 | Key | Action |
-|---|---|
-| `Enter` | Confirm the selection and run the inpainting |
-| `Backspace` | Undo the last point |
-| `Escape` | Cancel the selection |
+| --- | --- |
+| `Enter` | confirm the selection and run the inpainting |
+| `Backspace` | undo the last point |
+| `Escape` | cancel |
 
-**Manual coordinates:**
+Edges alternate between horizontal and vertical, starting with a horizontal one. The closing edge is vertical, so the last vertex must share the column of the first one ; the preview shows it in green when it does, in orange otherwise.
+
+**Coordinates on the command line** — the polygon is given in a compact form : the first vertex $`(r_1, c_1)`$, then one value per edge, alternately the column reached by a horizontal edge and the row reached by a vertical edge.
 
 ```bash
 ./build/main -i test_images/fingerprint_hole.png 73 49 72 143 49
+```
+
+Here the polygon is $`(73, 49) \to (73, 72) \to (143, 72) \to (143, 49)`$, closed by the vertical edge back to $`(73, 49)`$ : the rectangle of rows $`73`$ to $`143`$ and columns $`49`$ to $`72`$.
+
+```bash
 ./build/main -i test_images/beach.png 121 169 231 102 258 246 277 305 335 329 190 220 169
 ```
 
-Coordinates are given as `r1 c1 r2 c2 ...` (row, column pairs), alternating
-horizontal and vertical edges, following the same closing convention as the
-interactive mode: the polygon's last point must share its column with the
-first point, since the closing edge is always drawn vertical.
+Images are processed in grayscale. The run writes `before_recovering.png`, `initial_image.png`, `image_hole.png` (region $`\Omega`$ in white), `confidence_image.png` and the result `region_filling_output.png`, plus `selection_preview.png` in interactive mode.
 
-> ⚠️ Inpainting a large image (e.g. `beach.png`) can take a while — the patch
-> search is the dominant cost. See the [Performance](#performance) section.
+<details>
+<summary><b>Rotations (<code>-r</code>, <code>-er</code>) and convolutions (<code>-conv</code>)</b></summary>
 
-**What gets generated:** `before_recovering.png`, `initial_image.png`,
-`image_hole.png`, `confidence_image.png`, and the final
-`region_filling_output.png` (plus `selection_preview.png` if the interactive
-mode was used) — all under `output_images/`.
-
-### Rotation (`-r` / `-er`)
+<br>
 
 ```bash
-./build/main -r image_to_rotate.jpeg 60    # rigid rotation, 60°
-./build/main -er image_to_rotate.jpeg 60   # elastic rotation, 60°
-```
-
-- `-r` applies a standard rigid rotation around the image center
-  (`cv::warpAffine`, no holes).
-- `-er` applies a distance-weighted "elastic" rotation: the rotation
-  strength decreases with distance from a fixed center point, producing a
-  swirl-like effect rather than a uniform rotation.
-
-**What gets generated:** `rotated_image.png` under `output_images/`.
-
-### Convolution (`-conv`)
-
-```bash
-./build/main -conv image.png sobelX
+./build/main -r  test_images/Bird.png 60      # rigid rotation by 60° around the centre (cv::warpAffine)
+./build/main -er test_images/Bird.png 60      # elastic rotation : the angle decreases with the distance to a centre
+./build/main -conv test_images/beach.png sobelX
 ```
 
 | Category | Kernels |
-|---|---|
+| --- | --- |
 | Edge detection | `sobelX`, `sobelY`, `prewittX`, `prewittY`, `laplacian1`, `laplacian2` |
 | Blurring | `box_blur`, `gaussian` |
 
-**What gets generated:** `before_convolving.png` and
-`conv_<kernel_name>.png` under `output_images/`.
+Outputs : `rotated_image.png` for rotations, `before_convolving.png` and `conv_<kernel>.png` for convolutions.
 
-## Output
+</details>
 
-All generated images are written to `output_images/`, created automatically
-on first run.
+<br>
+
+---
+
+## Results
+
+### Fingerprint
+
+<div align="center">
+<img src="figures/fingerprint.png" width="95%" alt="Fingerprint inpainting"/>
+</div>
+
+<br>
+
+A $`71 \times 24`$ rectangle is removed from a $`187 \times 166`$ fingerprint and rebuilt in about $`0.25`$ s. The ridges are continued through the hole from both sides. The confidence map shows the filling order : confidence decreases towards the centre of $`\Omega`$, which is filled last from already-reconstructed pixels.
+
+<br>
+
+### Object removal
+
+<div align="center">
+<img src="figures/beach.png" width="95%" alt="Object removal on a beach scene"/>
+</div>
+
+<br>
+
+The left gymnast is removed from a $`408 \times 612`$ image in about $`28`$ s. The horizon line is propagated first, as strong edges get the highest priority, then the waves, the sky and the sand are filled with consistent textures. Small seams remain where two filling fronts meet.
+
+<br>
+
+| Image | Size | Region to fill | Time (2 cores) |
+| --- | --- | --- | --- |
+| `fingerprint_hole.png` | $`187 \times 166`$ | rectangle $`71 \times 24`$ | $`\approx 0.25`$ s |
+| `beach.png` | $`408 \times 612`$ | 12-vertex polygon | $`\approx 28`$ s ($`46`$ s on 1 core) |
+
+<br>
+
+---
+
+## Algorithm
+
+<details>
+<summary><b>Notation</b></summary>
+
+<br>
+
+Let $`\mathcal{D} = \{0, \dots, H-1\} \times \{0, \dots, W-1\}`$ be the pixel grid and $`I : \mathcal{D} \to \{0, \dots, 255\}`$ the grayscale image. The region to fill is $`\Omega \subset \mathcal{D}`$, the source region is $`\Phi = \mathcal{D} \setminus \Omega`$, and the fill front $`\delta\Omega`$ is the set of pixels of $`\Omega`$ adjacent to $`\Phi`$.
+
+For a pixel $`p`$, the patch $`\Psi_p`$ is the $`15 \times 15`$ square centred on $`p`$ :
+
+```math
+\Psi_p = \{\, p + (i, j) \;:\; i \in \{-7, \dots, 7\},\ j \in \{-7, \dots, 7\} \,\}, \qquad \lvert \Psi_p \rvert = 225 .
+```
+
+Every pixel carries a confidence $`C : \mathcal{D} \to [0, 1]`$, initialised as
+
+```math
+\forall\, p \in \Phi, \quad C(p) = 1, \qquad \forall\, p \in \Omega, \quad C(p) = 0 .
+```
+
+</details>
+
+<details>
+<summary><b>Priority of a patch</b></summary>
+
+<br>
+
+Each pixel of the front receives the priority
+
+```math
+\forall\, p \in \delta\Omega, \quad P(p) = C(p)\, D(p),
+```
+
+where the **confidence term** measures how much reliable information surrounds $`p`$,
+
+```math
+\forall\, p \in \delta\Omega, \quad C(p) = \frac{1}{\lvert \Psi_p \rvert} \sum_{q \in \Psi_p \cap \Phi} C(q),
+```
+
+and the **data term** measures how strongly an edge (isophote) hits the front at $`p`$,
+
+```math
+\forall\, p \in \delta\Omega, \quad D(p) = \frac{\big\lvert \nabla I_p^{\perp} \cdot n_p \big\rvert}{\alpha}, \qquad \alpha = 255 .
+```
+
+Here $`n_p`$ is the unit normal to $`\delta\Omega`$ at $`p`$, and $`\nabla I_p`$ is the Sobel gradient at $`p`$, where unknown pixels take the placeholder value $`255`$. It is set to zero when no pixel of $`\Psi_p`$ has an entirely known $`3 \times 3`$ neighbourhood. Rotating it by $`90^\circ`$ gives the direction of the isophote.
+
+</details>
+
+<details>
+<summary><b>Filling loop</b></summary>
+
+<br>
+
+While $`\delta\Omega \ne \emptyset`$ :
+
+1. take the pixel of highest priority, $`\hat p = \operatorname{arg\,max}_{p \in \delta\Omega} P(p)`$ ;
+2. find the exemplar patch entirely inside the source region that is closest to $`\Psi_{\hat p}`$ on its known pixels,
+
+```math
+\hat q = \mathop{\mathrm{arg\,min}}\limits_{q \;:\; \Psi_q \subset \Phi} \; \sum_{r \in \Psi_{\hat p} \cap \Phi} \big( I(r) - I(r - \hat p + q) \big)^2 ;
+```
+
+3. copy the missing pixels and propagate the confidence,
+
+```math
+\forall\, r \in \Psi_{\hat p} \cap \Omega, \quad I(r) \leftarrow I(r - \hat p + \hat q), \qquad C(r) \leftarrow C(\hat p) ;
+```
+
+4. remove the filled pixels from $`\Omega`$ and update the front $`\delta\Omega`$ and its priorities.
+
+Because $`C`$ decays as filling progresses inwards, patches surrounded by original pixels are filled first, while $`D`$ makes linear structures reach the centre of $`\Omega`$ before flat areas.
+
+</details>
+
+<br>
+
+---
 
 ## Project structure
+
+<details>
+<summary><b>Repository layout</b></summary>
+
+<br>
 
 ```
 patch-based-inpainting/
 ├── apps/
-│   └── main.cpp                        — CLI argument parsing and dispatch
+│   └── main.cpp                    # CLI parsing and dispatch
 ├── include/
-│   ├── image.hpp                       — image wrapper around cv::Mat, core algorithms
-│   ├── map.hpp                         — pixel confidence/priority map used during inpainting
-│   ├── pixel.hpp                       — per-pixel state (color, confidence)
-│   ├── commands.hpp                    — implementation of each CLI flag
-│   ├── kernels.hpp                     — convolution kernel definitions
-│   ├── interactive_selection.hpp       — mouse-based polygon selection
-│   ├── logger.hpp                      — leveled, colored console logging
-│   └── config.hpp                      — shared constants (output directory, ...)
-├── src/
-│   ├── image.cpp
-│   ├── map.cpp
-│   ├── pixel.cpp
-│   ├── commands.cpp
-│   ├── kernels.cpp
-│   ├── interactive_selection.cpp
-│   └── logger.cpp
-├── Images/                             — sample input images
-├── output_images/                      — generated output (created automatically)
-├── bib/                                — reference papers
-├── Makefile
-└── README.md
+│   ├── image.hpp                   # cv::Mat wrapper : rotations, convolution, region filling
+│   ├── map.hpp                     # confidence / priority grid, patch search, fill front (patch size here)
+│   ├── pixel.hpp                   # per-pixel state (value, confidence)
+│   ├── commands.hpp                # one function per CLI flag
+│   ├── kernels.hpp                 # convolution kernels
+│   ├── interactive_selection.hpp   # mouse-based polygon selection
+│   ├── logger.hpp                  # levelled, coloured console logging
+│   └── config.hpp                  # shared constants (output directory)
+├── src/                            # implementations of the headers above
+├── test_images/                    # sample inputs
+├── figures/                        # figures of this README
+├── bib/                            # reference papers
+└── Makefile
 ```
 
-## Algorithm
+</details>
 
-The inpainting method follows the exemplar-based approach described in:
+<br>
 
-> A. Criminisi, P. Pérez, K. Toyama, *"Region Filling and Object Removal by
-> Exemplar-Based Image Inpainting"*, IEEE Transactions on Image Processing,
-> 2004. (see `bib/criminisi_tip2004.pdf`)
+---
 
-In short: the region to fill is bounded by a "front line" of border pixels,
-each assigned a priority based on local confidence and isophote strength.
-At each step, the highest-priority patch is filled by copying the most
-similar patch found elsewhere in the image, and the front line is updated
-accordingly.
+## Design notes and limitations
 
-## Performance
+<details>
+<summary><b>Design notes</b></summary>
 
-The dominant cost is `nearest_patch`, which searches the whole image for the
-best-matching patch at every step of the filling process. It is parallelized
-with OpenMP (manual argmin reduction across threads).
+<br>
+
+- **Parallel patch search.**
+  `map::nearest_patch` scans every candidate patch of the image at each iteration ; it is the dominant cost. The scan is parallelised with OpenMP and a manual arg-min reduction : each thread keeps its own best candidate, merged once per thread in a critical section. The SSD inner loop is vectorised with `#pragma omp simd`.
+
+- **Data-term gradient.**
+  Criminisi et al. take the strongest gradient over the whole patch. Here the gradient is measured at the front pixel itself : on `beach.png`, the patch-wide maximum makes far-away edges drive the priorities and duplicates the other gymnast inside the hole.
+
+- **Deterministic search.**
+  Ties between candidate patches are broken by position, so the result does not depend on the number of threads or on their scheduling.
+
+- **Sequential filling loop.**
+  Each iteration depends on the pixels filled by the previous one, so the main loop stays sequential.
+
+- **Patch size.**
+  Patches are $`15 \times 15`$, set by `DEF_HEIGHT` and `DEF_WIDTH` in `include/map.hpp` (odd and equal, so that every patch has a centre pixel).
+
+- **Polygonal domains.**
+  The region to fill is an axis-aligned polygon with alternating horizontal and vertical edges, which keeps the construction of the initial front and of its normals simple.
+
+</details>
+
+<details>
+<summary><b>Known limitations</b></summary>
+
+<br>
+
+- The command line processes images in grayscale ; a per-channel colour path exists in `image::region_filling_recovery` but is not exposed.
+- The exhaustive search costs $`O(\lvert \mathcal{D} \rvert \cdot \lvert \Psi \rvert)`$ per iteration, which becomes slow on large images ; a restricted search window or an approximate nearest-neighbour search (PatchMatch) would remove this bottleneck.
+- The patch size is a compile-time constant.
+- The polygon must have axis-aligned edges.
+
+</details>
+
+<br>
+
+---
+
+## References
+
+- A. Criminisi, P. Pérez, K. Toyama, [*Region filling and object removal by exemplar-based image inpainting*](bib/criminisi_tip2004.pdf), IEEE Transactions on Image Processing, 2004.
+- A. Telea, [*An image inpainting technique based on the fast marching method*](bib/An_Image_Inpainting_Technique_Based_on_the_Fast_Ma.pdf), Journal of Graphics Tools, 2004.
