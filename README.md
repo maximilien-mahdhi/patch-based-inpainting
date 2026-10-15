@@ -76,8 +76,8 @@ C++17 · OpenCV · OpenMP-parallel patch search · interactive polygon selection
 **Main results**
 
 - **Structures are propagated across the hole.** On the fingerprint, the ridges entering $`\Omega`$ from both sides are continued through it, and the result is visually close to the ground truth.
-- **Objects are removed cleanly from natural scenes.** On the beach scene, the gymnast disappears and the horizon, the waves and the sand are continued through the hole.
-- **The run time is dominated by the patch search.** About $`0.25`$ s for the $`187 \times 166`$ fingerprint and $`28`$ s for the $`408 \times 612`$ beach scene on 2 cores, where OpenMP gives a $`1.7\times`$ speed-up.
+- **Objects are removed cleanly from natural scenes.** On the beach scene, the gymnast and the reflection of her hands disappear, and the horizon, the waves and the sand are continued through the hole.
+- **The run time is dominated by the patch search.** About $`0.25`$ s for the $`187 \times 166`$ fingerprint and $`30`$ s for the $`408 \times 612`$ beach scene on 2 cores, where OpenMP gives a $`1.7\times`$ speed-up.
 
 <br>
 
@@ -165,30 +165,66 @@ Edges alternate between horizontal and vertical, starting with a horizontal one.
 Here the polygon is $`(73, 49) \to (73, 72) \to (143, 72) \to (143, 49)`$, closed by the vertical edge back to $`(73, 49)`$ : the rectangle of rows $`73`$ to $`143`$ and columns $`49`$ to $`72`$.
 
 ```bash
-./build/main -i test_images/beach.png 121 169 231 102 258 246 277 305 335 329 190 220 169
+./build/main -i test_images/beach.png 121 169 231 102 258 246 277 305 335 329 243 353 210 329 190 220 169
 ```
 
 Images are processed in grayscale. The run writes `before_recovering.png`, `initial_image.png`, `image_hole.png` (region $`\Omega`$ in white), `confidence_image.png` and the result `region_filling_output.png`, plus `selection_preview.png` in interactive mode.
 
-<details>
-<summary><b>Rotations (<code>-r</code>, <code>-er</code>) and convolutions (<code>-conv</code>)</b></summary>
-
 <br>
+
+### Rotations (`-r`, `-er`)
 
 ```bash
 ./build/main -r  test_images/Bird.png 60      # rigid rotation by 60° around the centre (cv::warpAffine)
 ./build/main -er test_images/Bird.png 60      # elastic rotation : the angle decreases with the distance to a centre
+```
+
+Output : `rotated_image.png`.
+
+<br>
+
+### Convolution (`-conv`)
+
+```bash
 ./build/main -conv test_images/beach.png sobelX
 ```
 
-| Category | Kernels |
-| --- | --- |
-| Edge detection | `sobelX`, `sobelY`, `prewittX`, `prewittY`, `laplacian1`, `laplacian2` |
-| Blurring | `box_blur`, `gaussian` |
+Outputs : `before_convolving.png` and `conv_<kernel>.png`. The kernel is selected by its name :
 
-Outputs : `rotated_image.png` for rotations, `before_convolving.png` and `conv_<kernel>.png` for convolutions.
+<br>
 
-</details>
+| `<kernel_name>` | Kernel | Effect |
+| --- | --- | --- |
+| `sobelX` | $`S_x`$ | horizontal derivative (Sobel), detects vertical edges |
+| `sobelY` | $`S_y`$ | vertical derivative (Sobel), detects horizontal edges |
+| `prewittX` | $`P_x`$ | horizontal derivative (Prewitt) |
+| `prewittY` | $`P_y`$ | vertical derivative (Prewitt) |
+| `laplacian1` | $`\Delta_4`$ | Laplacian, 4-neighbourhood |
+| `laplacian2` | $`\Delta_8`$ | Laplacian, 8-neighbourhood |
+| `box_blur` | $`B`$ | mean filter |
+| `gaussian` | $`G`$ | binomial approximation of a Gaussian blur |
+
+<br>
+
+```math
+\begin{aligned}
+S_x &= \left(\!\begin{array}{rrr} -1 & 0 & 1 \\ -2 & 0 & 2 \\ -1 & 0 & 1 \end{array}\!\right),
+& \qquad
+S_y &= \left(\!\begin{array}{rrr} -1 & -2 & -1 \\ 0 & 0 & 0 \\ 1 & 2 & 1 \end{array}\!\right),
+\\[10pt]
+P_x &= \left(\!\begin{array}{rrr} -1 & 0 & 1 \\ -1 & 0 & 1 \\ -1 & 0 & 1 \end{array}\!\right),
+& \qquad
+P_y &= \left(\!\begin{array}{rrr} -1 & -1 & -1 \\ 0 & 0 & 0 \\ 1 & 1 & 1 \end{array}\!\right),
+\\[10pt]
+\Delta_4 &= \left(\!\begin{array}{rrr} 0 & -1 & 0 \\ -1 & 4 & -1 \\ 0 & -1 & 0 \end{array}\!\right),
+& \qquad
+\Delta_8 &= \left(\!\begin{array}{rrr} 1 & 1 & 1 \\ 1 & -8 & 1 \\ 1 & 1 & 1 \end{array}\!\right),
+\\[10pt]
+B &= \frac{1}{9} \left(\!\begin{array}{rrr} 1 & 1 & 1 \\ 1 & 1 & 1 \\ 1 & 1 & 1 \end{array}\!\right),
+& \qquad
+G &= \frac{1}{16} \left(\!\begin{array}{rrr} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1 \end{array}\!\right).
+\end{aligned}
+```
 
 <br>
 
@@ -216,14 +252,14 @@ A $`71 \times 24`$ rectangle is removed from a $`187 \times 166`$ fingerprint an
 
 <br>
 
-The left gymnast is removed from a $`408 \times 612`$ image in about $`28`$ s. The horizon line is propagated first, as strong edges get the highest priority, then the waves, the sky and the sand are filled with consistent textures. Small seams remain where two filling fronts meet.
+The left gymnast and the reflection of her hands are removed from a $`408 \times 612`$ image in about $`30`$ s. The horizon line is propagated first, as strong edges get the highest priority, then the waves, the sky and the sand are filled with consistent textures. Small seams remain where two filling fronts meet.
 
 <br>
 
 | Image | Size | Region to fill | Time (2 cores) |
 | --- | --- | --- | --- |
 | `fingerprint_hole.png` | $`187 \times 166`$ | rectangle $`71 \times 24`$ | $`\approx 0.25`$ s |
-| `beach.png` | $`408 \times 612`$ | 12-vertex polygon | $`\approx 28`$ s ($`46`$ s on 1 core) |
+| `beach.png` | $`408 \times 612`$ | 16-vertex polygon | $`\approx 30`$ s ($`51`$ s on 1 core) |
 
 <br>
 
@@ -286,11 +322,11 @@ Here $`n_p`$ is the unit normal to $`\delta\Omega`$ at $`p`$, and $`\nabla I_p`$
 
 While $`\delta\Omega \ne \emptyset`$ :
 
-1. take the pixel of highest priority, $`\hat p = \operatorname{arg\,max}_{p \in \delta\Omega} P(p)`$ ;
+1. take the pixel of highest priority, $`\hat p = \mathrm{arg\,max}_{p \in \delta\Omega} P(p)`$ ;
 2. find the exemplar patch entirely inside the source region that is closest to $`\Psi_{\hat p}`$ on its known pixels,
 
 ```math
-\hat q = \mathop{\mathrm{arg\,min}}\limits_{q \;:\; \Psi_q \subset \Phi} \; \sum_{r \in \Psi_{\hat p} \cap \Phi} \big( I(r) - I(r - \hat p + q) \big)^2 ;
+\hat q = \underset{q \;:\; \Psi_q \subset \Phi}{\mathrm{arg\,min}} \; \sum_{r \in \Psi_{\hat p} \cap \Phi} \big( I(r) - I(r - \hat p + q) \big)^2 ;
 ```
 
 3. copy the missing pixels and propagate the confidence,
