@@ -267,10 +267,7 @@ The left gymnast and the reflection of her hands are removed from a $`408 \times
 
 ## Algorithm
 
-<details>
-<summary><b>Notation</b></summary>
-
-<br>
+### Notation
 
 Let $`\mathcal{D} = \{0, \dots, H-1\} \times \{0, \dots, W-1\}`$ be the pixel grid and $`I : \mathcal{D} \to \{0, \dots, 255\}`$ the grayscale image. The region to fill is $`\Omega \subset \mathcal{D}`$, the source region is $`\Phi = \mathcal{D} \setminus \Omega`$, and the fill front $`\delta\Omega`$ is the set of pixels of $`\Omega`$ adjacent to $`\Phi`$.
 
@@ -286,12 +283,8 @@ Every pixel carries a confidence $`C : \mathcal{D} \to [0, 1]`$, initialised as
 \forall\, p \in \Phi, \quad C(p) = 1, \qquad \forall\, p \in \Omega, \quad C(p) = 0 .
 ```
 
-</details>
 
-<details>
-<summary><b>Priority of a patch</b></summary>
-
-<br>
+### Priority of a patch
 
 Each pixel of the front receives the priority
 
@@ -313,12 +306,8 @@ and the **data term** measures how strongly an edge (isophote) hits the front at
 
 Here $`n_p`$ is the unit normal to $`\delta\Omega`$ at $`p`$, and $`\nabla I_p`$ is the Sobel gradient at $`p`$, where unknown pixels take the placeholder value $`255`$. It is set to zero when no pixel of $`\Psi_p`$ has an entirely known $`3 \times 3`$ neighbourhood. Rotating it by $`90^\circ`$ gives the direction of the isophote.
 
-</details>
 
-<details>
-<summary><b>Filling loop</b></summary>
-
-<br>
+### Filling loop
 
 While $`\delta\Omega \ne \emptyset`$ :
 
@@ -339,7 +328,6 @@ While $`\delta\Omega \ne \emptyset`$ :
 
 Because $`C`$ decays as filling progresses inwards, patches surrounded by original pixels are filled first, while $`D`$ makes linear structures reach the centre of $`\Omega`$ before flat areas.
 
-</details>
 
 <br>
 

@@ -20,7 +20,7 @@
 //       the polygon with the mouse instead
 //    ./build/main -i beach.png                                                       (interactive mouse selection)
 //    ./build/main -i clean_finger_small.png 73 49 72 143 49
-//    ./build/main -i beach.png 121 169 231 102 258 246 277 305 335 329 190 220 169   (long computation)
+//    ./build/main -i beach.png 121 169 231 102 258 246 277 305 335 329 243 353 210 329 190 220 169   (long computation, hand reflections included)
 //    ./build/main -i beach.png 125 172 210 151 223 102 258 154 242 169 235 245 276 289 242 307 336 330 216 271 195 221 161 165 172   (long computation)
 //
 //  CONVOLUTION
