@@ -411,5 +411,5 @@ patch-based-inpainting/
 
 ## References
 
-- A. Criminisi, P. Pérez, K. Toyama, [*Region filling and object removal by exemplar-based image inpainting*](bib/criminisi_tip2004.pdf), IEEE Transactions on Image Processing, 2004.
-- A. Telea, [*An image inpainting technique based on the fast marching method*](bib/An_Image_Inpainting_Technique_Based_on_the_Fast_Ma.pdf), Journal of Graphics Tools, 2004.
+- A. Criminisi, P. Pérez, K. Toyama, *Region filling and object removal by exemplar-based image inpainting*, IEEE Transactions on Image Processing, 13(9), 2004. [doi:10.1109/TIP.2004.833105](https://doi.org/10.1109/TIP.2004.833105)
+- A. Telea, *An image inpainting technique based on the fast marching method*, Journal of Graphics Tools, 9(1), 2004. [doi:10.1080/10867651.2004.10487596](https://doi.org/10.1080/10867651.2004.10487596)
